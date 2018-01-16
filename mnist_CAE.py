@@ -133,7 +133,7 @@ class Plotter(object):
                             left=0.0, right=1.0, 
                             hspace=0.0, wspace=0.0)
          
-        self.fig3 = plt.figure(figsize=(10,5))
+        self.fig3 = plt.figure(figsize=(5,2.5))
         self.w2_axes = []
         self.w2_imgs = []
         for x in range(5):
@@ -147,7 +147,10 @@ class Plotter(object):
         plt.subplots_adjust(top=1.0, bottom=0.0, 
                             left=0.0, right=1.0, 
                             hspace=0.0, wspace=0.0)
-        
+
+        if not os.path.exists("imgs"):
+            os.makedirs("imgs")
+
     def plot(self, R_loss, data, patterns, w0, w1, w2):
        
         losses = [R_loss]   
