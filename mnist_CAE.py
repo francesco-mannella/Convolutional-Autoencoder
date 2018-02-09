@@ -72,8 +72,10 @@ class Plotter(object):
         self.losses_lines.append(line)
         self.labels = ["reconstruction"]  
         self.losses_ax.legend(self.losses_lines, self.labels)  
-        self.losses_ax.set_xlim([0, stime])
-        self.losses_ax.set_ylim([0, 0.5])
+        self.losses_ax.grid(color='b', linestyle='--', linewidth=0.5)
+        self.losses_ax.set_yticks(np.linspace(0.0,0.25, 11))
+        self.losses_ax.set_xlim([0, stime]) 
+        self.losses_ax.set_ylim([0.0, 0.25]) 
 
         # data data_patterns          
         self.data_pattern_axes = []
@@ -101,23 +103,6 @@ class Plotter(object):
                 self.pattern_axes.append(ax)
                 self.pattern_imgs.append(im)
 
-        
-        # weights         
-#         self.fig1 = plt.figure(figsize=(8,4))
-#         self.w0_axes = []
-#         self.w0_imgs = []
-#         for x in range(4):
-#             for y in range(8):
-#                 ax = self.fig1.add_subplot(4, 8, x * 8 + y + 1, aspect="auto")
-#                 im = ax.imshow(np.zeros([3, 3]), vmin=0, vmax=1)
-#                 ax.get_xaxis().set_visible(False)
-#                 ax.get_yaxis().set_visible(False)
-#                 self.w0_axes.append(ax)
-#                 self.w0_imgs.append(im)
-#         plt.subplots_adjust(top=1.0, bottom=0.0, 
-#                             left=0.0, right=1.0, 
-#                             hspace=0.0, wspace=0.0)
-  
         self.fig2 = plt.figure(figsize=(5, 3))
         self.w1_axes = []
         self.w1_imgs = []
@@ -174,18 +159,7 @@ class Plotter(object):
         self.fig.canvas.draw()
         self.fig.savefig("imgs/cae.png")
         self.fig.savefig("imgs/cae-{:03d}.png".format(self.t))
-        
-#         for x in range(4):
-#             for y in range(8):
-#                 k = x*8 + y     
-#                 im = self.w0_imgs[k]
-#                 data = w0[:,:,0,k].reshape(3, 3)
-#                 data = (data - data.min())/(data.max() - data.min())
-#                 im.set_data(data)
-#         self.fig1.canvas.draw()
-#         self.fig1.savefig("imgs/cae_w0.png")
-#         self.fig1.savefig("imgs/cae-w0-{:03d}.png".format(self.t))
- 
+
         for x in range(3):
             for y in range(5):
                 k = x*5 + y     
@@ -213,46 +187,53 @@ class Plotter(object):
 #------------------------------------------------------------------------------- 
 #Globals 
 epochs = 50
-num_samples = 300
-lr = 0.5
+num_samples = 550
+lr = 0.8
+weight_scale=0.2
+decay=0.2
 #-------------------------------------------------------------------------------
 plotter = Plotter(epochs)
 graph = tf.Graph()
 with graph.as_default():
     #---------------------------------------------------------------------------
-    drop_out = tf.placeholder(tf.float32, ())
     #  Autoencoder
-    with tf.variable_scope('Autoencoder'):
+    phase_train = tf.placeholder(tf.bool, ())
+    #input
+    autoencoder_layers    = [ [28, 28, 1]  ]
 
-        #input
-        autoencoder_layers    = [ [28, 28, 1]  ]
+    # encoder
+    autoencoder_layers    += [ [14, 14, 3],    [7, 7, 5],         [7, 7, 10],       [10],          ]
+    autoencoder_outfuns    = [ tf.nn.relu,     tf.nn.relu,        tf.nn.relu,       tf.nn.relu     ] 
+    autoencoder_convs      = [ [3, 3, 1, 3],   [12, 12, 3, 5],    [20, 20, 5, 10],  None           ]
+    autoencoder_deconvs    = [ None,           None,              None,             None           ]
+    autoencoder_copy_from  = [ None,           None,              None,             None           ]
+    autoencoder_strides    = [ 2,              2,                 1,                None           ]
+    autoencoder_bn         = [ True,           True,              True,             True           ]
 
-        # encoder
-        autoencoder_layers    += [ [14, 14, 3],    [7, 7, 5],         [7, 7, 10],       [10],          ]
-        autoencoder_outfuns    = [ tf.nn.relu,     tf.nn.relu,        tf.nn.relu,       tf.nn.relu     ] 
-        autoencoder_convs      = [ [3, 3, 1, 3],   [12, 12, 3, 5],    [20, 20, 5, 10],  None           ]
-        autoencoder_deconvs    = [ None,           None,              None,             None           ]
-        autoencoder_copy_from  = [ None,           None,              None,             None           ]
-        autoencoder_strides    = [ 2,              2,                 1,                None           ]
-        
-        # decoder
-        autoencoder_layers    += [ [7, 7, 10],     [7, 7, 5],         [14, 14, 3],      [28, 28, 1]    ]
-        autoencoder_outfuns   += [ tf.nn.relu,     tf.nn.relu,        tf.nn.relu,       tf.tanh        ] 
-        autoencoder_convs     += [ None,           None,              None,             None           ]
-        autoencoder_deconvs   += [ None,           [20, 20, 5, 10],   [12, 12, 3, 5],   [3, 3, 1, 3]   ]
-        autoencoder_copy_from += [ None,           2,                 1,                0              ]
-        autoencoder_strides   += [ None,           1,                 2,                2              ]
+    # decoder
+    autoencoder_layers    += [ [7, 7, 10],     [7, 7, 5],         [14, 14, 3],      [28, 28, 1]    ]
+    autoencoder_outfuns   += [ tf.nn.relu,     tf.nn.relu,        tf.nn.relu,       tf.tanh        ] 
+    autoencoder_convs     += [ None,           None,              None,             None           ]
+    autoencoder_deconvs   += [ None,           [20, 20, 5, 10],   [12, 12, 3, 5],   [3, 3, 1, 3]   ]
+    autoencoder_copy_from += [ None,           2,                 1,                0              ]
+    autoencoder_strides   += [ None,           1,                 2,                2              ]
+    autoencoder_bn        += [ True,           True,              True,             True           ]
 
-        autoencoder = MLP(lr=lr, drop_out=0.3, scope="A",
-                convs=autoencoder_convs,
-                deconvs=autoencoder_deconvs,
-                strides=autoencoder_strides,
-                outfuns=autoencoder_outfuns, 
-                copy_from=autoencoder_copy_from, 
-                layers_lens=autoencoder_layers)   
-        
-        data_sample = tf.placeholder(tf.float32, [num_samples] + autoencoder_layers[0])
-        reconstructed_sample = autoencoder.update(data_sample, drop_out)      
+    autoencoder = MLP(
+        scope="Autoencoder",
+        lr=lr,
+        bn_decay=decay,
+        weight_scale=weight_scale,
+        convs=autoencoder_convs,
+        deconvs=autoencoder_deconvs,
+        strides=autoencoder_strides,
+        outfuns=autoencoder_outfuns, 
+        copy_from=autoencoder_copy_from, 
+        layers_lens=autoencoder_layers,
+        batch_norms=autoencoder_bn)   
+    
+    data_sample = tf.placeholder(tf.float32, [num_samples] + autoencoder_layers[0])
+    reconstructed_sample = autoencoder.update(data_sample, phase_train=phase_train)      
     #---------------------------------------------------------------------------   
     R_loss = tf.reduce_mean(tf.pow(data_sample - reconstructed_sample, 2.0))
     #---------------------------------------------------------------------------
@@ -276,16 +257,23 @@ with graph.as_default():
             
                 # reconstruction step -- encoder -> decoder (minimize reconstruction  error)
                 curr_data_sample = get_data_sample(t)
-                current_decoded_patterns, r_loss, _ = session.run(
-                    [reconstructed_sample, R_loss, R_train], 
-                    feed_dict={data_sample:curr_data_sample, drop_out: 1.0})       
+                current_decoded_patterns, ll, r_loss, _ = session.run(
+                    [reconstructed_sample, autoencoder.layers[-7], R_loss, R_train], 
+                    feed_dict={
+                        data_sample:curr_data_sample, 
+                        phase_train: True})       
                 r_losses.append(r_loss) 
+                                
             R_losses.append(np.mean(r_losses))
             
             np.random.shuffle(data)
             test_data_sample = get_data_sample(0)
             test_decoded_patterns, w0, w1, w2 = session.run( 
-                [reconstructed_sample, autoencoder.weights[0], autoencoder.weights[1], autoencoder.weights[2]],
-                feed_dict={data_sample:test_data_sample, drop_out: 1.0}) 
+                [reconstructed_sample, autoencoder.weights[0], autoencoder.weights[1],
+                  autoencoder.weights[2]],
+                feed_dict={
+                    data_sample:test_data_sample, 
+                    phase_train: False}) 
+            
             plotter.plot(R_losses, test_data_sample, test_decoded_patterns, w0, w1, w2)
                 
